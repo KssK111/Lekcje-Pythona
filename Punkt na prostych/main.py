@@ -2,10 +2,8 @@ from itertools import starmap
 from os.path import join as join_path
 
 def czy_nalezy(C: tuple[int, int], Figura: list[tuple[int, int]] | tuple[int, int]) -> bool:
-    if isinstance(Figura, tuple):
-        return C == Figura
-    elif len(Figura) == 1:
-        return C == Figura[0]
+    if isinstance(Figura, tuple): return C == Figura
+    elif len(Figura) == 1: return C == Figura[0]
     czy_nalezzzy = lambda A, B: (B[0] - A[0]) * (C[1] - A[1]) == (B[1] - A[1]) * (C[0] - A[0])
     return any(starmap(czy_nalezzzy, zip(Figura[:-1], Figura[1:])))
 
