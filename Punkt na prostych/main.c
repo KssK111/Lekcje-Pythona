@@ -2,12 +2,23 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
+#include <ctype.h>
+#include <assert.h>
 
 typedef struct
 {
     int x;
     int y;
 } Punkt;
+Punkt Punkt_new(int x, int y)
+{
+    Punkt p =
+    {
+        .x = x,
+        .y = y
+    };
+    return p;
+}
 
 typedef struct
 {
@@ -30,7 +41,7 @@ void VecPunkt_push(Punkt p, VecPunkt* vec)
     if(vec->pojemnosc == vec->dlugosc)
     {
         vec->pojemnosc *= 2;
-        realloc(vec->punkty, sizeof(Punkt) * vec->pojemnosc);
+        vec->punkty = realloc(vec->punkty, sizeof(Punkt) * vec->pojemnosc);
     }
     vec->punkty[vec->dlugosc] = p;
     vec->dlugosc++;
@@ -57,7 +68,7 @@ void VecVecPunkt_push(VecPunkt vec, VecVecPunkt* vecvec)
     if(vecvec->pojemnosc == vecvec->dlugosc)
     {
         vecvec->pojemnosc *= 2;
-        realloc(vecvec->listy, sizeof(VecPunkt) * vecvec->pojemnosc);
+        vecvec->listy = realloc(vecvec->listy, sizeof(VecPunkt) * vecvec->pojemnosc);
     }
     vecvec->listy[vecvec->dlugosc] = vec;
     vecvec->dlugosc++;
@@ -85,11 +96,11 @@ VecPunkt_lub_Punkt vplp_vec(VecPunkt vp)
     };
     return vplp;
 }
-VecPunkt_lub_Punkt vplp_vec(Punkt p)
+VecPunkt_lub_Punkt vplp_punkt(Punkt p)
 {
     VecPunkt_lub_Punkt vplp =
     {
-        .typ = LISTA,
+        .typ = TUPEL,
         .tupel = p
     };
     return vplp;
@@ -106,19 +117,22 @@ String String_new_empty()
     String str =
     {
         .znaki = malloc(sizeof(char)),
-        .dlugosc = 0,
+        .dlugosc = 1,
         .pojemnosc = 1
     };
+    str.znaki[0] = '\0';
     return str;
 }
 String String_new(char* znaki_startowe)
 {
+    size_t dlugosc = strlen(znaki_startowe) + 1;
     String str =
     {
-        .znaki = znaki_startowe,
-        .dlugosc = strlen(znaki_startowe) - 1, //ingoruję \0, ta implementacja nie używa \0
-        .pojemnosc = strlen(znaki_startowe)
+        .dlugosc = dlugosc,
+        .pojemnosc = dlugosc
     };
+    str.znaki = malloc(sizeof(char) * dlugosc);
+    memcpy(str.znaki, znaki_startowe, dlugosc);
     return str;
 }
 void String_push_char(char znak, String* str)
@@ -126,16 +140,40 @@ void String_push_char(char znak, String* str)
     if(str->pojemnosc == str->dlugosc)
     {
         str->pojemnosc *= 2;
-        realloc(str->znaki, sizeof(char) * str->pojemnosc);
+        str->znaki = realloc(str->znaki, sizeof(char) * str->pojemnosc);
     }
-    str->znaki[str->dlugosc] = znak;
+
+    str->znaki[str->dlugosc - 1] = znak;
+    str->znaki[str->dlugosc] = '\0';
     str->dlugosc++;
 }
 void String_push_chars(char* znaki, String* str)
 {
-    size_t i = 0;
-    while(znaki[i] != '\0')
-        String_push_char(znaki[i], str);
+    size_t dodatkowa_dlugosc = strlen(znaki) + 1;
+    size_t nowa_dlugosc = str->dlugosc - 1 + dodatkowa_dlugosc;
+    if(str->pojemnosc < nowa_dlugosc)
+    {
+        str->znaki = realloc(str->znaki, sizeof(char) * (nowa_dlugosc));
+        str->pojemnosc = nowa_dlugosc;
+    }
+    memcpy(&(str->znaki[str->dlugosc - 1]), znaki, dodatkowa_dlugosc);
+    str->dlugosc = nowa_dlugosc;
+}
+void String_clear(String* str)
+{
+    str->dlugosc = 1;
+    str->znaki[0] = '\0';
+}
+void String_trim(String* str)
+{
+    size_t przesuniecie_start = 0;
+    size_t przesuniecie_end = 0;
+    while(isspace((unsigned char)str->znaki[przesuniecie_start])) przesuniecie_start++;
+    while(isspace((unsigned char)str->znaki[str->dlugosc - 2 - przesuniecie_end])) przesuniecie_end++;
+    str->dlugosc = str->dlugosc - (przesuniecie_start + przesuniecie_end) - 1/*null byte uwzgędniony później*/;
+    str->znaki = memmove(str->znaki, &(str->znaki[przesuniecie_start]), str->dlugosc);
+    str->znaki[str->dlugosc] = '\0';
+    str->dlugosc++;
 }
 
 bool czy_nalezy(Punkt C, VecPunkt_lub_Punkt Figura)
@@ -161,13 +199,68 @@ bool czy_nalezy(Punkt C, VecPunkt_lub_Punkt Figura)
     }
 }
 
-VecVecPunkt wczytaj_figury(char* plik)
+bool next_line(FILE* plik, String* buffer)
 {
-    
+    int znak = fgetc(plik);
+    if(znak == EOF) return false;
+    if(znak == '\n') return true;
+    do
+    {
+        String_push_char(znak, buffer);
+        znak = fgetc(plik);
+    } while((znak != '\n') && (znak != EOF));
+    return true;
+}
+VecVecPunkt wczytaj_figury(char* nazwa_pliku)
+{
+    FILE* plik = fopen(nazwa_pliku, "r");
+    VecVecPunkt wynik = VecVecPunkt_new();
+    VecPunkt wynik_temp = VecPunkt_new();
+    String linia = String_new_empty();
+    while(next_line(plik, &linia))
+    {
+        String_trim(&linia);
+        char* spacja;
+        if(spacja = strstr(linia.znaki, " "))
+        {
+            //Chyba można też sscanf, aleee
+            *spacja = '\0';
+            int x = atoi(linia.znaki);
+            int y = atoi(spacja + 1);
+            VecPunkt_push(Punkt_new(x, y), &wynik_temp);
+        }
+        else if(wynik_temp.dlugosc)
+        {
+            VecVecPunkt_push(wynik_temp, &wynik);
+            wynik_temp = VecPunkt_new();
+        }
+        String_clear(&linia);
+    }
+    if(wynik_temp.dlugosc) VecVecPunkt_push(wynik_temp, &wynik);
+    fclose(plik);
+    return wynik;
 }
 
 int main()
 {
-
+    VecVecPunkt figury = wczytaj_figury("dane.txt");
+    for(size_t i = 0; i < figury.dlugosc; i++)
+    {
+        for(size_t j = 0; j < figury.listy[i].dlugosc; j++)
+        {
+            Punkt p = figury.listy[i].punkty[j];
+            printf("A = %d, B = %d\n", p.x, p.y);
+        }
+        printf("\n");
+    }
+    for(size_t i = 0; i < figury.dlugosc; i++)
+    {
+        bool sprawdzmy = czy_nalezy(Punkt_new(3, 2), vplp_vec(figury.listy[i]));
+        printf("%s\n", sprawdzmy ? "True" : "False");
+    }
+    assert(czy_nalezy(Punkt_new(5, 5), vplp_punkt(Punkt_new(5, 5))));
+    VecPunkt vp = VecPunkt_new();
+    VecPunkt_push(Punkt_new(5, 5), &vp);
+    assert(czy_nalezy(Punkt_new(5, 5), vplp_vec(vp)));
     return EXIT_SUCCESS;
 }
