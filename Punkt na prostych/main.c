@@ -257,10 +257,13 @@ int main()
     {
         bool sprawdzmy = czy_nalezy(Punkt_new(3, 2), vplp_vec(figury.listy[i]));
         printf("%s\n", sprawdzmy ? "True" : "False");
+        free(figury.listy[i].punkty);
     }
+    free(figury.listy);
     assert(czy_nalezy(Punkt_new(5, 5), vplp_punkt(Punkt_new(5, 5))));
     VecPunkt vp = VecPunkt_new();
     VecPunkt_push(Punkt_new(5, 5), &vp);
     assert(czy_nalezy(Punkt_new(5, 5), vplp_vec(vp)));
+    free(vp.punkty);
     return EXIT_SUCCESS;
 }
